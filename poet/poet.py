@@ -182,7 +182,7 @@ def make_graph(index_url, pkg):
     )
 
 
-def formula_for(index_url, package, also=None, template_path=None):
+def formula_for(index_url, package, also=None, template_path=None, include_python_minor_version=False):
     also = also or []
 
     req = pkg_resources.Requirement.parse(package)
@@ -199,7 +199,9 @@ def formula_for(index_url, package, also=None, template_path=None):
     else:
         raise Exception("Could not find package {} in nodes {}".format(package, nodes.keys()))
 
-    python = "python@2" if sys.version_info.major == 2 else "python@3"
+    python = "python@{}".format(sys.version_info.major)
+    if include_python_minor_version:
+        python += ".{}".format(sys.version_info.minor)
 
     template = template_from_file(template_path) if template_path else FORMULA_TEMPLATE
 
@@ -266,6 +268,10 @@ def main():
     parser.add_argument(
         '--formula-template',
         help='A custom Jinja2 template file to use if generating a forumla')
+    parser.add_argument(
+        '--include-python-minor-version',
+        action="store_true",
+        help='Include the minor version in the dependency on python')
     args = parser.parse_args()
 
     if (args.formula or args.resources) and args.package:
@@ -281,7 +287,15 @@ def main():
         return 1
 
     if args.formula:
-        print(formula_for(args.index_url, args.formula, args.also, args.formula_template))
+        print(
+            formula_for(
+                args.index_url,
+                args.formula,
+                args.also,
+                args.formula_template,
+                args.include_python_minor_version,
+            )
+        )
     elif args.single:
         for i, package in enumerate(args.single):
             data = research_package(args.index_url, package)
