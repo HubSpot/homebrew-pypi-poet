@@ -47,3 +47,8 @@ RESOURCE_TEMPLATE = env.from_string("""\
     {{ resource.checksum_type }} "{{ resource.checksum }}"
   end
 """)
+
+
+def template_from_file(path):
+    with open(path) as file_:
+      return env.from_string(file_.read())

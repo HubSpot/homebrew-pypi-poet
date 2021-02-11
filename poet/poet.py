@@ -21,7 +21,7 @@ import warnings
 import pkg_resources
 import pypi_simple
 
-from .templates import FORMULA_TEMPLATE, RESOURCE_TEMPLATE
+from .templates import FORMULA_TEMPLATE, RESOURCE_TEMPLATE, template_from_file
 from .util import compute_sha256_sum, extract_credentials_from_url, transform_url
 from .version import __version__
 
@@ -182,7 +182,7 @@ def make_graph(index_url, pkg):
     )
 
 
-def formula_for(index_url, package, also=None):
+def formula_for(index_url, package, also=None, template_path=None):
     also = also or []
 
     req = pkg_resources.Requirement.parse(package)
@@ -200,10 +200,15 @@ def formula_for(index_url, package, also=None):
         raise Exception("Could not find package {} in nodes {}".format(package, nodes.keys()))
 
     python = "python" if sys.version_info.major == 2 else "python3"
-    return FORMULA_TEMPLATE.render(package=root,
-                                   resources=resources,
-                                   python=python,
-                                   ResourceTemplate=RESOURCE_TEMPLATE)
+
+    template = template_from_file(template_path) if template_path else FORMULA_TEMPLATE
+
+    return template.render(
+        package=root,
+        resources=resources,
+        python=python,
+        ResourceTemplate=RESOURCE_TEMPLATE
+    )
 
 
 def resources_for(index_url, packages):
@@ -258,6 +263,9 @@ def main():
     parser.add_argument(
         '--index-url', default=DEFAULT_INDEX_URL,
         help="Base URL of Python Package Index")
+    parser.add_argument(
+        '--formula-template',
+        help='A custom Jinja2 template file to use if generating a forumla')
     args = parser.parse_args()
 
     if (args.formula or args.resources) and args.package:
@@ -273,7 +281,7 @@ def main():
         return 1
 
     if args.formula:
-        print(formula_for(args.index_url, args.formula, args.also))
+        print(formula_for(args.index_url, args.formula, args.also, args.formula_template))
     elif args.single:
         for i, package in enumerate(args.single):
             data = research_package(args.index_url, package)
