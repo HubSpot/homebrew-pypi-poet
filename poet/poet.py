@@ -21,8 +21,10 @@ import sys
 import warnings
 
 import pkg_resources
+import pypi_simple
 
 from .templates import FORMULA_TEMPLATE, RESOURCE_TEMPLATE
+from .util import extract_credentials_from_url, transform_url
 from .version import __version__
 
 try:
@@ -34,6 +36,9 @@ except ImportError:
 
 # Show warnings and greater by default
 logging.basicConfig(level=int(os.environ.get("POET_DEBUG", 30)))
+
+
+DEFAULT_INDEX_URL = "https://pypi.io/pypi"
 
 
 class PackageNotInstalledWarning(UserWarning):
@@ -76,51 +81,89 @@ def recursive_dependencies(package):
     return sorted(discovered)
 
 
-def research_package(name, version=None):
-    with closing(urlopen("https://pypi.io/pypi/{}/json".format(name))) as f:
-        reader = codecs.getreader("utf-8")
-        pkg_data = json.load(reader(f))
-    d = {}
-    d['name'] = pkg_data['info']['name']
-    d['homepage'] = pkg_data['info'].get('home_page', '')
-    artefact = None
-    if version:
-        for pypi_version in pkg_data['releases']:
-            if pkg_resources.safe_version(pypi_version) == version:
-                for version_artefact in pkg_data['releases'][pypi_version]:
-                    if version_artefact['packagetype'] == 'sdist':
-                        artefact = version_artefact
-                        break
-        if artefact is None:
-            warnings.warn("Could not find an exact version match for "
-                          "{} version {}; using newest instead".
-                          format(name, version), PackageVersionNotFoundWarning)
+def research_package(index_url, name, version=None):
+    package = {
+        "name": name,
+        "url": "",
+        "checksum": "",
+        "checksum_type": "sha256",
+    }
 
-    if artefact is None:  # no version given or exact match not found
-        for url in pkg_data['urls']:
-            if url['packagetype'] == 'sdist':
-                artefact = url
-                break
+    pypi_client = _get_pypi_client(index_url)
 
-    if artefact:
-        d['url'] = artefact['url']
-        if 'digests' in artefact and 'sha256' in artefact['digests']:
-            logging.debug("Using provided checksum for %s", name)
-            d['checksum'] = artefact['digests']['sha256']
-        else:
-            logging.debug("Fetching sdist to compute checksum for %s", name)
-            with closing(urlopen(artefact['url'])) as f:
-                d['checksum'] = sha256(f.read()).hexdigest()
-            logging.debug("Done fetching %s", name)
-    else:  # no sdist found
-        d['url'] = ''
-        d['checksum'] = ''
+    distributions = pypi_client.get_project_files(name)
+    source_distributions = [
+        dist for dist in distributions if dist.package_type == 'sdist'
+    ]
+    if not source_distributions:
         warnings.warn("No sdist found for %s" % name)
-    d['checksum_type'] = 'sha256'
-    return d
+        return package
+
+    matching_distribution = None
+
+    if version:
+        matching_distribution = _find_exact_version(version, source_distributions)
+
+        if matching_distribution is None:
+            warnings.warn(
+                "Could not find an exact version match for {} version {}; using newest "
+                "instead".format(name, version),
+                PackageVersionNotFoundWarning,
+            )
+
+    if matching_distribution is None:
+        matching_distribution = _find_latest_version(source_distributions)
+
+    # Strip fragment with hash information
+    package["url"] = transform_url(matching_distribution.url, fragment="")
+
+    digests = matching_distribution.get_digests()
+    try:
+        sha256_sum = digests["sha256"]
+    except KeyError:
+        logging.debug("Fetching sdist to compute checksum for %s", name)
+        sha256_sum = _compute_sha256_sum(matching_distribution.url)
+        logging.debug("Done fetching %s", name)
+
+    package["checksum"] = sha256_sum
+
+    return package
 
 
-def make_graph(pkg):
+def _get_pypi_client(index_url):
+    index_url_without_creds, username, password = extract_credentials_from_url(
+        index_url
+    )
+
+    return pypi_simple.PyPISimple(
+        endpoint=index_url_without_creds,
+        auth=(username, password),
+    )
+
+
+def _find_latest_version(distributions):
+    return max(
+        distributions,
+        key=(lambda dist: pkg_resources.parse_version(dist.version)),
+    )
+
+
+def _find_exact_version(version, distributions):
+    parsed_version = pkg_resources.parse_version(version)
+
+    for dist in distributions:
+        if pkg_resources.parse_version(dist.version) == parsed_version:
+            return dist
+
+    return None
+
+
+def _compute_sha256_sum(url):
+    with closing(urlopen(url)) as file_:
+        return sha256(file_.read()).hexdigest()
+
+
+def make_graph(index_url, pkg):
     """Returns a dictionary of information about pkg & its recursive deps.
 
     Given a string, which can be parsed as a requirement specifier, return a
@@ -144,7 +187,7 @@ def make_graph(pkg):
             dependencies[package]['version'] = None
 
     for package in dependencies:
-        package_data = research_package(package, dependencies[package]['version'])
+        package_data = research_package(index_url, package, dependencies[package]['version'])
         dependencies[package].update(package_data)
 
     return OrderedDict(
@@ -152,13 +195,13 @@ def make_graph(pkg):
     )
 
 
-def formula_for(package, also=None):
+def formula_for(index_url, package, also=None):
     also = also or []
 
     req = pkg_resources.Requirement.parse(package)
     package_name = req.project_name
 
-    nodes = merge_graphs(make_graph(p) for p in [package] + also)
+    nodes = merge_graphs(make_graph(index_url, p) for p in [package] + also)
     resources = [value for key, value in nodes.items()
                  if key.lower() != package_name.lower()]
 
@@ -176,8 +219,8 @@ def formula_for(package, also=None):
                                    ResourceTemplate=RESOURCE_TEMPLATE)
 
 
-def resources_for(packages):
-    nodes = merge_graphs(make_graph(p) for p in packages)
+def resources_for(index_url, packages):
+    nodes = merge_graphs(make_graph(index_url, p) for p in packages)
     return '\n\n'.join([RESOURCE_TEMPLATE.render(resource=node)
                         for node in nodes.values()])
 
@@ -225,6 +268,9 @@ def main():
     parser.add_argument(
         '-V', '--version', action='version',
         version='homebrew-pypi-poet {}'.format(__version__))
+    parser.add_argument(
+        '--index-url', default=DEFAULT_INDEX_URL,
+        help="Base URL of Python Package Index")
     args = parser.parse_args()
 
     if (args.formula or args.resources) and args.package:
@@ -240,10 +286,10 @@ def main():
         return 1
 
     if args.formula:
-        print(formula_for(args.formula, args.also))
+        print(formula_for(args.index_url, args.formula, args.also))
     elif args.single:
         for i, package in enumerate(args.single):
-            data = research_package(package)
+            data = research_package(args.index_url, package)
             print(RESOURCE_TEMPLATE.render(resource=data))
             if i != len(args.single)-1:
                 print()
@@ -252,7 +298,7 @@ def main():
         if not package:
             parser.print_usage(sys.stderr)
             return 1
-        print(resources_for([package] + args.also))
+        print(resources_for(args.index_url, [package] + args.also))
     return 0
 
 
