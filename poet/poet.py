@@ -199,7 +199,7 @@ def formula_for(index_url, package, also=None, template_path=None):
     else:
         raise Exception("Could not find package {} in nodes {}".format(package, nodes.keys()))
 
-    python = "python" if sys.version_info.major == 2 else "python3"
+    python = "python@2" if sys.version_info.major == 2 else "python@3"
 
     template = template_from_file(template_path) if template_path else FORMULA_TEMPLATE
 
