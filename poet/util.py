@@ -1,9 +1,13 @@
+from contextlib import closing
+from hashlib import sha256
+
 try:
     # Python 2.x
-    from urllib2 import urlparse, urlunparse
+    from urllib2 import urlopen, urlparse, urlunparse
 except ImportError:
     # Python 3.x
     from urllib.parse import urlparse, urlunparse
+    from urllib.request import urlopen
 
 
 _PARSED_URL_INDICES = {
@@ -48,3 +52,8 @@ def transform_url(url, **kwargs):
         url_parts[index] = value
 
     return urlunparse(tuple(url_parts))
+
+
+def compute_sha256_sum(url):
+    with closing(urlopen(url)) as file_:
+        return sha256(file_.read()).hexdigest()

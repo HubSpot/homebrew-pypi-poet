@@ -12,8 +12,6 @@ from __future__ import print_function
 import argparse
 import codecs
 from collections import OrderedDict
-from contextlib import closing
-from hashlib import sha256
 import json
 import logging
 import os
@@ -24,15 +22,9 @@ import pkg_resources
 import pypi_simple
 
 from .templates import FORMULA_TEMPLATE, RESOURCE_TEMPLATE
-from .util import extract_credentials_from_url, transform_url
+from .util import compute_sha256_sum, extract_credentials_from_url, transform_url
 from .version import __version__
 
-try:
-    # Python 2.x
-    from urllib2 import urlopen
-except ImportError:
-    # Python 3.x
-    from urllib.request import urlopen
 
 # Show warnings and greater by default
 logging.basicConfig(level=int(os.environ.get("POET_DEBUG", 30)))
@@ -122,7 +114,7 @@ def research_package(index_url, name, version=None):
         sha256_sum = digests["sha256"]
     except KeyError:
         logging.debug("Fetching sdist to compute checksum for %s", name)
-        sha256_sum = _compute_sha256_sum(matching_distribution.url)
+        sha256_sum = compute_sha256_sum(matching_distribution.url)
         logging.debug("Done fetching %s", name)
 
     package["checksum"] = sha256_sum
@@ -156,11 +148,6 @@ def _find_exact_version(version, distributions):
             return dist
 
     return None
-
-
-def _compute_sha256_sum(url):
-    with closing(urlopen(url)) as file_:
-        return sha256(file_.read()).hexdigest()
 
 
 def make_graph(index_url, pkg):
