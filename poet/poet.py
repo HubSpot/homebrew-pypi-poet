@@ -209,7 +209,8 @@ def formula_for(index_url, package, also=None, template_path=None, include_pytho
         package=root,
         resources=resources,
         python=python,
-        ResourceTemplate=RESOURCE_TEMPLATE
+        ResourceTemplate=RESOURCE_TEMPLATE,
+        env=os.environ,
     )
 
 
