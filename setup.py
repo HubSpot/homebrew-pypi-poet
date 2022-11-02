@@ -22,7 +22,7 @@ setup(
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3.6',
     ],
-    install_requires=['jinja2', 'pypi-simple', 'setuptools'],
+    install_requires=['jinja2', 'pypi-simple < 1', 'setuptools'],
     entry_points={'console_scripts': [
         'poet=poet:main',
         'poet_lint=poet.lint:main',
