@@ -135,9 +135,20 @@ def _get_pypi_client(index_url):
 
 
 def _find_latest_version(distributions):
+    valid_distributions = []
+    for dist in distributions:
+        try:
+            parse_version(dist.version)
+            valid_distributions.append(dist)
+        except InvalidVersion:
+            continue
+    
+    if not valid_distributions:
+        return None
+        
     return max(
-        distributions,
-        key=(lambda dist: pkg_resources.parse_version(dist.version)),
+        valid_distributions,
+        key=(lambda dist: parse_version(dist.version)),
     )
 
 
