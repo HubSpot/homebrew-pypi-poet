@@ -20,6 +20,7 @@ import warnings
 
 import pkg_resources
 import pypi_simple
+from packaging.version import parse as parse_version, InvalidVersion
 
 from .templates import FORMULA_TEMPLATE, RESOURCE_TEMPLATE, template_from_file
 from .util import compute_sha256_sum, extract_credentials_from_url, transform_url
@@ -134,18 +135,37 @@ def _get_pypi_client(index_url):
 
 
 def _find_latest_version(distributions):
+    valid_distributions = []
+    for dist in distributions:
+        try:
+            parse_version(dist.version)
+            valid_distributions.append(dist)
+        except InvalidVersion:
+            continue
+    
+    if not valid_distributions:
+        return None
+        
     return max(
-        distributions,
-        key=(lambda dist: pkg_resources.parse_version(dist.version)),
+        valid_distributions,
+        key=(lambda dist: parse_version(dist.version)),
     )
 
 
 def _find_exact_version(version, distributions):
-    parsed_version = pkg_resources.parse_version(version)
+    try:
+        parsed_version = parse_version(version)
+    except InvalidVersion:
+        return None
 
     for dist in distributions:
-        if pkg_resources.parse_version(dist.version) == parsed_version:
-            return dist
+        try:
+            dist_version = parse_version(dist.version)
+            if dist_version == parsed_version:
+                return dist
+        except InvalidVersion:
+            # Skip distributions with invalid version strings
+            continue
 
     return None
 
