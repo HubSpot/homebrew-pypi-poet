@@ -202,9 +202,9 @@ def make_graph(index_url, pkg):
     )
 
 
-def formula_for(index_url, package, also=None, template_path=None, include_python_minor_version=False, extra_depends=None):
+def formula_for(index_url, package, also=None, template_path=None, include_python_minor_version=False, additional_homebrew_deps=None):
     also = also or []
-    extra_depends = extra_depends or []
+    additional_homebrew_deps = additional_homebrew_deps or []
 
     req = pkg_resources.Requirement.parse(package)
     package_name = req.project_name
@@ -216,8 +216,8 @@ def formula_for(index_url, package, also=None, template_path=None, include_pytho
             resources.append(value)
             # Check for PyNaCl and automatically add libsodium dependency
             if value.get('name', '').lower() == 'pynacl':
-                if 'libsodium' not in extra_depends:
-                    extra_depends.append('libsodium')
+                if 'libsodium' not in additional_homebrew_deps:
+                    additional_homebrew_deps.append('libsodium')
 
     if package_name in nodes:
         root = nodes[package_name]
@@ -236,7 +236,7 @@ def formula_for(index_url, package, also=None, template_path=None, include_pytho
         package=root,
         resources=resources,
         python=python,
-        extra_depends=extra_depends,
+        additional_homebrew_deps=additional_homebrew_deps,
         ResourceTemplate=RESOURCE_TEMPLATE,
         env=os.environ,
     )
