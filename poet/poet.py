@@ -202,9 +202,9 @@ def make_graph(index_url, pkg):
     )
 
 
-def formula_for(index_url, package, also=None, template_path=None, include_python_minor_version=False, additional_homebrew_deps=None):
+def formula_for(index_url, package, also=None, template_path=None, include_python_minor_version=False, additional_deps=None):
     also = also or []
-    additional_homebrew_deps = additional_homebrew_deps or []
+    additional_deps = additional_deps or []
 
     req = pkg_resources.Requirement.parse(package)
     package_name = req.project_name
@@ -230,7 +230,7 @@ def formula_for(index_url, package, also=None, template_path=None, include_pytho
         package=root,
         resources=resources,
         python=python,
-        additional_homebrew_deps=additional_homebrew_deps,
+        additional_deps=additional_deps,
         ResourceTemplate=RESOURCE_TEMPLATE,
         env=os.environ,
     )
@@ -296,7 +296,7 @@ def main():
         action="store_true",
         help='Include the minor version in the dependency on python')
     parser.add_argument(
-        '--depends-on', '-d', action='append', default=[],
+        '--additional-deps', '-d', action='append', default=[],
         help='Additional Homebrew dependencies to add as depends_on lines. Can be repeated.')
     args = parser.parse_args()
 
@@ -320,7 +320,7 @@ def main():
                 args.also,
                 args.formula_template,
                 args.include_python_minor_version,
-                args.depends_on,
+                args.additional_deps,
             )
         )
     elif args.single:

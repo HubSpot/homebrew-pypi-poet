@@ -20,7 +20,7 @@ FORMULA_TEMPLATE = env.from_string(dedent("""\
 
       depends_on "{{ python }}"
 
-    {% for depend in additional_homebrew_deps %}
+    {% for depend in additional_deps %}
       depends_on "{{ depend }}"
     {% endfor %}
 
