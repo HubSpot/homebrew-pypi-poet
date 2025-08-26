@@ -210,14 +210,8 @@ def formula_for(index_url, package, also=None, template_path=None, include_pytho
     package_name = req.project_name
 
     nodes = merge_graphs(make_graph(index_url, p) for p in [package] + also)
-    resources = []
-    for key, value in nodes.items():
-        if key.lower() != package_name.lower():
-            resources.append(value)
-            # Check for PyNaCl and automatically add libsodium dependency
-            if value.get('name', '').lower() == 'pynacl':
-                if 'libsodium' not in additional_homebrew_deps:
-                    additional_homebrew_deps.append('libsodium')
+    resources = [value for key, value in nodes.items()
+                 if key.lower() != package_name.lower()]
 
     if package_name in nodes:
         root = nodes[package_name]
