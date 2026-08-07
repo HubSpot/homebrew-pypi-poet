@@ -20,6 +20,7 @@ import warnings
 
 import pkg_resources
 import pypi_simple
+from packaging.utils import canonicalize_name
 from packaging.version import parse as parse_version, InvalidVersion
 
 from .templates import FORMULA_TEMPLATE, RESOURCE_TEMPLATE, template_from_file
@@ -50,7 +51,7 @@ def recursive_dependencies(package):
     if not isinstance(package, pkg_resources.Requirement):
         raise TypeError("Expected a Requirement; got a %s" % type(package))
 
-    discovered = {package.project_name.lower()}
+    discovered = {canonicalize_name(package.project_name)}
     visited = set()
 
     def walk(package):
@@ -66,7 +67,7 @@ def recursive_dependencies(package):
             reqs = pkg_resources.get_distribution(package).requires(extras)
         except pkg_resources.DistributionNotFound:
             return
-        discovered.update(req.project_name.lower() for req in reqs)
+        discovered.update(canonicalize_name(req.project_name) for req in reqs)
         for req in reqs:
             walk(req)
 
@@ -183,10 +184,10 @@ def make_graph(index_url, pkg):
 
     dependencies = {key: {} for key in pkg_deps if key not in ignore}
     installed_packages = pkg_resources.working_set
-    versions = {package.key: package.version for package in installed_packages}
+    versions = {canonicalize_name(package.key): package.version for package in installed_packages}
     for package in dependencies:
         try:
-            dependencies[package]['version'] = versions[package]
+            dependencies[package]['version'] = versions[canonicalize_name(package)]
         except KeyError:
             warnings.warn("{} is not installed so we cannot compute "
                           "resources for its dependencies.".format(package),
@@ -209,13 +210,12 @@ def formula_for(index_url, package, also=None, template_path=None, include_pytho
     package_name = req.project_name
 
     nodes = merge_graphs(make_graph(index_url, p) for p in [package] + also)
+    normalized_name = canonicalize_name(package_name)
     resources = [value for key, value in nodes.items()
-                 if key.lower() != package_name.lower()]
+                 if canonicalize_name(key) != normalized_name]
 
-    if package_name in nodes:
-        root = nodes[package_name]
-    elif package_name.lower() in nodes:
-        root = nodes[package_name.lower()]
+    if normalized_name in nodes:
+        root = nodes[normalized_name]
     else:
         raise Exception("Could not find package {} in nodes {}".format(package, nodes.keys()))
 
@@ -244,15 +244,16 @@ def merge_graphs(graphs):
     result = {}
     for g in graphs:
         for key in g:
-            if key not in result:
-                result[key] = g[key]
-            elif result[key] == g[key]:
+            normalized = canonicalize_name(key)
+            if normalized not in result:
+                result[normalized] = g[key]
+            elif result[normalized] == g[key]:
                 pass
             else:
                 warnings.warn(
-                    "Merge conflict: {l.name} {l.version} and "
-                    "{r.name} {r.version}; using the former.".
-                    format(l=result[key], r=g[key]),
+                    "Merge conflict: {l[name]} {l[version]} and "
+                    "{r[name]} {r[version]}; using the former.".
+                    format(l=result[normalized], r=g[key]),
                     ConflictingDependencyWarning)
     return OrderedDict([k, result[k]] for k in sorted(result.keys()))
 
