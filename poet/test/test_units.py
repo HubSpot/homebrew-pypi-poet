@@ -48,6 +48,16 @@ unlinted = """
 """  # noqa
 
 
+class TestMergeGraphs(object):
+    def test_dotted_and_hyphenated_names_merge(self):
+        g1 = {"jaraco.context": {"name": "jaraco.context", "version": "6.0.1"}}
+        g2 = {"jaraco-context": {"name": "jaraco-context", "version": "6.1.2"}}
+        merged = poet.poet.merge_graphs([g1, g2])
+        assert len(merged) == 1
+        assert "jaraco-context" in merged
+        assert merged["jaraco-context"]["version"] == "6.0.1"
+
+
 class TestLint(object):
     def test_lint(self):
         linted = poet.lint(unlinted)
